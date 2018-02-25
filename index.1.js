@@ -10,13 +10,17 @@ var pageNum = 1 // current page displayed
 
 addHead(dataSet[1]) // populate column headers and headers variable from dataSet item
 console.log(headers)
-dataSet.forEach(addRow); // populate initial table
-var stateTotals = {};
-resetStateTotals()
-pageBar(); // populate page bar at bottom
-dataSet.forEach(populateStates); // populate map with markers after building table
  
-d3.select('#map').style('height', '500px')
+var stateTotals = {}; // holds total result for each state
+resetStateTotals() // populates state abbreviation keys with value 0
+
+dataSet.forEach(addRow); // populate initial table
+
+pageBar(); // populate page bar at bottom
+dataSet.forEach(populateStates); // populate stateTotals after building table
+ 
+//create map
+var $mapArea = d3.select('#map').style('height', '500px')
 var myMap = L.map("map", {
     center: [37.09, -95.71],
     zoom: 4.25
@@ -26,47 +30,9 @@ L.tileLayer(
     "access_token=" + "pk.eyJ1IjoiZm9yYXBpa2V5cyIsImEiOiJjamRoanh2Mm0weDF2MnBucXA4azJwb3R0In0.9kKeQvjpAdGZ9en88Yo0og"
 ).addTo(myMap);
 
-drawBorders()
+var geoJsonLayers = {}; //declare us states geoJsonLayer globally to be defined in drawBorders
+control = null //defined in colorStates
 colorStates()
-
-function drawBorders() {
-
-    var geoJsonLayer = L.geoJson(stateBorders).addTo(myMap);
-    
-    geoJsonLayer.eachLayer(function (layer) {
-        layer._path.id = layer.feature.properties.STUSPS10.toLowerCase();
-    });
-       
-};
-
-function populateStates(dataObject){
-    stateTotals[dataObject.state] += 1
-
-}
-
-function colorStates() {
-    console.log(stateTotals)
-    var arratios = []
-    Object.keys(stateTotals).forEach(state_id => {
-        if ((stateTotals[state_id]) && (pops[state_id])) {
-            arratios.push(stateTotals[state_id]/pops[state_id])
-        }
-    })
-    var theMax = Math.max.apply(Math, arratios);
-    console.log(theMax)
-    
-    Object.keys(stateTotals).forEach(state_id => {
-        //console.log((stateTotals[state_id]/pops[state_id])/theMax)
-        //console.log(`${state_id} - ${stateTotals[state_id]/theMax}`)
-        try {
-            d3.select('#' + state_id).attr('fill-opacity', (stateTotals[state_id]/pops[state_id])/theMax)
-        } catch (error) {
-            console.log(error)
-        }
-    })
-}
-
-
 
 d3.select('#search').on('click',function () {
     pageNum = 1; // set page number back to first page
@@ -152,22 +118,24 @@ function addInputBox(container, criteria, width) {
 }*/
 
 function startSearch() {
-    counter = 0;
+    counter = 0; // counter of valid results
     resetStateTotals();
     
-    searchCriteria = [];
-    headers.forEach(getSearchCriteria);
+    searchCriteria = []; 
+    headers.forEach(getSearchCriteria); //get whats entered in the boxes above
     d3.select('tbody').selectAll('tr').remove();
-    console.log(Date());
+    //console.log(Date());
     dataSet.forEach(dataObject => {
         //console.log(dataObject)
         filterData(dataObject);
     });
     
-    //console.log(Date());
+    console.log(searchCriteria); //checker might add to an html box somewhere
     console.log(`${counter} results`)
-    colorStates()
-    pageBar();
+    d3.selectAll('path').remove()
+    control.remove()
+    colorStates() // use stateTotals made in filterData to color in map
+    pageBar(); //build pageBar based on counter
     
 };
 
@@ -233,6 +201,75 @@ function filterData(dataObject) {
 
 }
 
+
+function populateStates(dataObject){
+    // add to stateTotals totals
+    // a groupby method of populating at end of filter might be more efficient
+    stateTotals[dataObject.state] += 1
+}
+
+function colorStates() {
+
+    // get total sightings per state and color by that or the per capita
+    console.log(stateTotals)
+    var maxRatio = 0 // array of ratios 
+    var maxTotal = 0;
+    Object.keys(pops).forEach(state_id => {
+        if (maxRatio < stateTotals[state_id]/pops[state_id]) {
+            maxRatio = stateTotals[state_id]/pops[state_id]
+        }
+        if (maxTotal < stateTotals[state_id]) {
+            maxTotal = stateTotals[state_id];
+        };
+    })
+
+    console.log(maxRatio)
+    console.log(maxTotal)
+
+
+    geoJsonLayers.perCapita = L.geoJson(stateBorders);
+    
+    //add id codes to html for later reference 'tx' in form
+    geoJsonLayers.perCapita.eachLayer(function (layer) {
+        code = layer.feature.properties.code;
+        layer.setStyle({
+            weight: 1,
+            fillOpacity: (stateTotals[code]/pops[code])/maxRatio
+        });
+        layer.bindPopup(`<h3>${layer.feature.properties.name}</h3><text>Sightings - ${stateTotals[code]} <br> Per Capita - ${stateTotals[code]/pops[code]}</text>`);
+        layer.on({
+            mouseover: function(event) {
+                event.target.setStyle({
+                    fillColor: 'green'
+                })
+            },
+            mouseout: function(event) {
+                event.target.setStyle({
+                    fillColor: '#3388ff'
+                })
+            }
+        }
+        )
+    });
+
+    geoJsonLayers.total = L.geoJson(stateBorders);
+    
+    // set fill of choropleth
+    geoJsonLayers.total.eachLayer(function (layer) {
+        code = layer.feature.properties.code;
+        layer.setStyle({
+            weight: 1,
+            fillOpacity: Math.sqrt(stateTotals[code]/maxTotal)
+        });
+        console.log(stateTotals[code]/maxTotal)
+        layer.bindPopup(`<h3>${layer.feature.properties.name}</h3><text>Sightings - ${stateTotals[code]} <br> Per Capita - ${stateTotals[code]/pops[code]}</text>`);
+    });
+
+
+    control = L.control.layers(geoJsonLayers).addTo(myMap);
+
+}
+
 function resetStateTotals() {
     stateTotals = {
         ca : 0,
@@ -283,6 +320,7 @@ function resetStateTotals() {
         sd: 0,
         nd: 0,
         vt:	0,
-        wy: 0
+        wy: 0,
+        ak: 0
     }
 }
