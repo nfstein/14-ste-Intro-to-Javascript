@@ -1,5 +1,5 @@
 # 14-ste-Intro-to-Javascript
-filterable table from scraped ufo sighting data
+Filterable table to search for scraped UFO sighting data
 
 ## index.html
 Builds table and search bar from data.   
@@ -8,3 +8,5 @@ Works for any similarly formatted dataset.
 
 ## index.1.html
 Same as above but with Leaflet map showing Choropleth representations of the overall sightings per American state and sightings per capita per American state.
+
+![UFO_sightings](./index.1.png)
